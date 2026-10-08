@@ -1,0 +1,15 @@
+{
+  "name": "myfoodlink-engineering",
+  "version": "1.0.0",
+  "description": "Problemas reais de produção do MyFoodLink (SaaS multi-tenant para restaurantes) e como foram resolvidos com código, testes e CI/CD.",
+  "private": true,
+  "license": "MIT",
+  "author": "João Luan Mendonça Moura (https://joaomoura.dev.br)",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint:shell": "shellcheck -S warning ops/*.sh"
+  }
+}
