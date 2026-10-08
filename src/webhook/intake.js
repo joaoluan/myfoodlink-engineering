@@ -2,13 +2,16 @@
 
 // Fase de admissão do webhook do WhatsApp, executada antes do atendimento.
 //
-// Regras que vieram de problemas reais em produção:
-// 1. Responder sempre HTTP 200. Erro 5xx faz o provedor reenviar o evento, e o reenvio
-//    vira mensagem duplicada para o cliente. Falhas internas são registradas sem payload.
-// 2. Deduplicar pelo ID da mensagem antes de qualquer efeito colateral (log, CRM, resposta).
+// Exemplo demonstrativo revisado para não confirmar mensagens cuja admissão falhou:
+// 1. HTTP 200 para eventos ignorados ou cópias de uma admissão bem-sucedida.
+//    Falha interna retorna 503, liberando o ID para uma nova tentativa.
+// 2. Compartilhar admissões simultâneas e marcar o ID como concluído só após o sucesso.
 // 3. Uma palavra ambígua ("cancelar", "não") só é descadastro se o cliente não estiver
 //    respondendo a uma pergunta nossa (ver src/consent/ambiguous-optout.js).
 //
+// recordIncoming deve persistir de forma durável e idempotente por messageId.
+// done:false entrega o fluxo ao chamador, que ainda deve responder e recuperar falhas
+// posteriores usando o registro persistido. Este módulo não implementa esse worker.
 // Todas as dependências são injetadas: o módulo não conhece Express, banco nem provedor.
 function createWebhookIntake(deps) {
   const {
@@ -16,10 +19,11 @@ function createWebhookIntake(deps) {
     normalizeMessage,
     shouldIgnore = () => false,
     dedup,
-    recordIncoming = async () => {},
+    recordIncoming,
     classifyOptOut,
     onOptOut = async () => {}
   } = deps;
+  if (typeof recordIncoming !== 'function') throw new TypeError('recordIncoming obrigatorio');
 
   return async function runWebhookIntake(req, res) {
     try {
@@ -29,27 +33,34 @@ function createWebhookIntake(deps) {
         return { done: true, reason: 'ignored' };
       }
 
-      if (dedup.seenBefore(message.messageId)) {
+      const admission = await dedup.runOnce(message.messageId, async () => {
+        await recordIncoming(message);
+        if (!message.fromMe && classifyOptOut) {
+          const decision = await classifyOptOut(message);
+          if (decision.optOut) {
+            // O adaptador deve ser idempotente: uma tentativa pode falhar após persistir.
+            await onOptOut(message, decision);
+            return { optOut: true };
+          }
+        }
+        return { optOut: false };
+      });
+
+      if (admission.duplicate) {
         res.status(200).json({ duplicated: true });
         return { done: true, reason: 'duplicate' };
       }
 
-      await recordIncoming(message);
-
-      if (!message.fromMe && classifyOptOut) {
-        const decision = await classifyOptOut(message);
-        if (decision.optOut) {
-          await onOptOut(message, decision);
-          res.sendStatus(200);
-          return { done: true, reason: 'opt_out' };
-        }
+      if (admission.value.optOut) {
+        res.sendStatus(200);
+        return { done: true, reason: 'opt_out' };
       }
 
       return { done: false, message };
     } catch (error) {
-      // Nunca devolver 5xx ao provedor: registrar a causa (sem o corpo da mensagem) e encerrar.
+      // Não confirmar uma admissão que falhou. Não incluir o corpo da mensagem no log.
       logger.error('[WEBHOOK] falha na admissao:', error?.message || error);
-      if (!res.headersSent) res.sendStatus(200);
+      if (!res.headersSent) res.sendStatus(503);
       return { done: true, reason: 'internal_error' };
     }
   };

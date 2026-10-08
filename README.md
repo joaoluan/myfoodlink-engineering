@@ -14,7 +14,7 @@ O código do produto é privado. **Este repositório mostra como ele é feito:**
 
 | # | Problema | Área | Solução |
 |---|---|---|---|
-| 01 | [Cliente recebendo a mesma resposta duas vezes](docs/casos/01-mensagens-duplicadas.md) | Webhooks | Deduplicação por ID e HTTP 200 sempre ao provedor |
+| 01 | [Cliente recebendo a mesma resposta duas vezes](docs/casos/01-mensagens-duplicadas.md) | Webhooks | Deduplicação após admissão bem-sucedida, concorrência e reenvio após falha |
 | 02 | ["Cancelar" virando descadastro de marketing](docs/casos/02-cancelar-virando-descadastro.md) | LGPD, produto | Opt-out por contexto, preservando o descadastro na dúvida |
 | 03 | [Webhook de pagamento de outro restaurante derrubando o endpoint](docs/casos/03-webhook-de-pagamento-de-outro-restaurante.md) | Pagamentos, multi-tenant | Ignorar evento de conta desconhecida; um gateway por restaurante |
 | 04 | [O cardápio que travava para sempre](docs/casos/04-deadlock-de-pool-no-postgres.md) | PostgreSQL, concorrência | Conexão da transação passada adiante e prazos no pool |
@@ -24,6 +24,10 @@ O código do produto é privado. **Este repositório mostra como ele é feito:**
 | 08 | [Deploy que se protege sozinho](docs/casos/08-deploy-que-se-protege.md) | CI/CD | Deploy puxado com portões e rollback automático |
 | 09 | [Provisionar um restaurante sem deixar nada pela metade](docs/casos/09-restaurante-pela-metade.md) | Multi-tenant | Preflight, confirmação, rollback só do que foi criado |
 | 10 | [O risco de um subdomínio servir o restaurante errado](docs/casos/10-subdominio-servindo-outro-cliente.md) | Proxy, isolamento | Reload do proxy e validação do tenant no pós-deploy |
+
+## Revisão do demonstrativo
+
+O [caso 01](docs/casos/01-mensagens-duplicadas.md) foi revisado neste repositório demonstrativo: a versão anterior marcava o ID antes da gravação e respondia 200 em caso de erro, podendo descartar uma mensagem não gravada. A correção pública responde 503 na falha, libera o ID para uma nova tentativa e faz entregas simultâneas aguardarem a mesma admissão. Os testes agora cobrem falha seguida de recuperação. Essa revisão não modifica nem atesta o comportamento do código privado em produção; os contratos de persistência e os limites do cache em memória estão documentados no caso.
 
 ## CI/CD em uma imagem
 
