@@ -1,2 +1,1 @@
-# restaurant-whatsapp-toolkit
-Recebimento de mensagens do WhatsApp em Node.js: deduplicação, idempotência e telefone brasileiro canônico. Extraído de um SaaS para restaurantes em produção.
+Problemas reais de produção de um SaaS multi-tenant para restaurantes (MyFoodLink) e como foram resolvidos: código, testes e CI/CD.
