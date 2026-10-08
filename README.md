@@ -1,10 +1,10 @@
 # MyFoodLink · engenharia de um SaaS multi-tenant para restaurantes
 
-[![CI](https://github.com/joaoluan/restaurant-whatsapp-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/joaoluan/restaurant-whatsapp-toolkit/actions/workflows/ci.yml)
+[![CI](https://github.com/joaoluan/myfoodlink-engineering/actions/workflows/ci.yml/badge.svg)](https://github.com/joaoluan/myfoodlink-engineering/actions/workflows/ci.yml)
 ![Node](https://img.shields.io/badge/node-20%20%7C%2022-339933)
 ![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-blue)
 
-O **MyFoodLink** é a plataforma que eu construí e opero para restaurantes: atendimento por WhatsApp com transferência para humano, CRM, campanhas com consentimento (LGPD), cardápio digital, pedidos, reservas, avaliações e fidelidade. Cada restaurante roda isolado, com processo, banco e instância de WhatsApp próprios.
+O **MyFoodLink** é a plataforma que eu construí e opero para restaurantes: atendimento por WhatsApp com transferência para humano, CRM, campanhas com consentimento (LGPD), cardápio digital, pedidos, reservas, avaliações e fidelidade. Cada restaurante roda isolado, com processo, banco e instância de WhatsApp próprios. Hoje atende 2 restaurantes em produção, com cerca de 300 pedidos e mais de 2.000 acessos por mês.
 
 O código do produto é privado. **Este repositório mostra como ele é feito:** problemas reais que apareceram em produção, a causa de cada um e a correção, com código e testes que rodam aqui. Tudo foi extraído do código real e sanitizado (sem clientes, endereços ou segredos).
 
@@ -84,4 +84,4 @@ Uso Claude Code e Codex como par de programação para ir mais rápido. A arquit
 
 ### In English
 
-Engineering notes from **MyFoodLink**, a multi-tenant restaurant SaaS I built and run (WhatsApp service with human handoff, CRM, consent-aware campaigns, online menus, orders, bookings, reviews and loyalty). The product code is private. This repository shows real production problems, their root causes and the fixes, as sanitized, tested code: webhook idempotency, context-aware opt-out (LGPD), multi-tenant payment webhooks, a PostgreSQL pool deadlock, Redis reconnection, Brazilian phone normalization, a backup lock race, a pull-based deploy with automatic rollback, and safe tenant provisioning. CI runs the tests on Node 20 and 22, ShellCheck and a gitleaks secret scan.
+Engineering notes from **MyFoodLink**, a multi-tenant restaurant SaaS I built and run, serving 2 restaurants in production with about 300 orders and 2,000+ visits per month (WhatsApp service with human handoff, CRM, consent-aware campaigns, online menus, orders, bookings, reviews and loyalty). The product code is private. This repository shows real production problems, their root causes and the fixes, as sanitized, tested code: webhook idempotency, context-aware opt-out (LGPD), multi-tenant payment webhooks, a PostgreSQL pool deadlock, Redis reconnection, Brazilian phone normalization, a backup lock race, a pull-based deploy with automatic rollback, and safe tenant provisioning. CI runs the tests on Node 20 and 22, ShellCheck and a gitleaks secret scan.
