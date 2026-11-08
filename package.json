@@ -10,6 +10,8 @@
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "lint:shell": "shellcheck -S warning ops/*.sh"
+    "lint:shell": "shellcheck -S warning ops/*.sh",
+    "test:sync": "node --test test/integration/*.test.js",
+    "demo:sync": "node examples/offline-sync.js"
   }
 }

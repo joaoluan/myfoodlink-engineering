@@ -23,6 +23,20 @@ jobs:
       - name: Testes automatizados (sem rede, sem banco, sem dados reais)
         run: npm test
 
+  sincronizacao-sqlite:
+    name: Sync com SQLite real (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm run test:sync
+      - run: npm run demo:sync
+
   scripts-de-operacao:
     name: Scripts de operação
     runs-on: ubuntu-latest

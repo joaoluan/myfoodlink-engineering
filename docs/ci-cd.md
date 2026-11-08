@@ -45,7 +45,7 @@ O CI bloqueia o merge se:
 
 **4. Este repositório**
 
-O [workflow deste repositório](../.github/workflows/ci.yml) roda os testes em Node 20 e 22, ShellCheck nos scripts de operação e varredura de segredos com gitleaks em todo push e PR.
+O [workflow deste repositório](../.github/workflows/ci.yml) roda os testes em Node 20 e 22, ShellCheck nos scripts de operação e varredura de segredos com gitleaks em todo push e PR. Um job separado em Node 22 e 24 executa os testes de integração SQLite (`npm run test:sync`) e a demonstração (`npm run demo:sync`) do [caso 11](casos/11-venda-offline-e-sincronizacao.md).
 
 ## Incidentes e correções no próprio pipeline
 

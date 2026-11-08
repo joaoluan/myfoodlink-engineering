@@ -1,71 +1,65 @@
-# Arquitetura do MyFoodLink (visão sanitizada)
+# Arquitetura do MFL
 
-O MyFoodLink é uma plataforma SaaS multi-tenant para restaurantes: atendimento por WhatsApp com transferência para humano, CRM, campanhas com consentimento, cardápio digital, pedidos, reservas, avaliações e fidelidade.
-
-Endereços, nomes de servidores e credenciais foram omitidos.
+Visão lógica sanitizada, revisada documentalmente em 08/11/2026. As caixas representam responsabilidades; não especificam endereços, rotas, portas ou topologia operacional.
 
 ```mermaid
-flowchart LR
-  subgraph Clientes
-    C[Cliente final<br/>WhatsApp e web]
-    R[Equipe do restaurante<br/>painel]
+flowchart TB
+  Consumidor[Consumidor: web e WhatsApp] --> Online[Atendimento e vendas online por restaurante]
+  Equipe[Gestor do restaurante] --> Painel[Painel web do restaurante]
+  Painel --> Online
+  Interessado[Interessado e conta comercial] --> Comercial[Backend comercial]
+  Operador[Operação da plataforma] --> Console[Console interno restrito]
+  Console --> Control[Control plane e auditoria]
+  Console --> Comercial
+  Control -. ciclo de vida .-> Online
+  Online --> PG[(PostgreSQL: bancos e papéis separados)]
+  Online --> Redis[(Redis: estado transitório)]
+  Online <--> WA[Integração WhatsApp]
+  Online <--> Pagamentos[Provedores de pagamento]
+  subgraph Loja
+    Terminais[PDV, garçom e KDS] --> Local[Servidor local]
+    Local --> SQLite[(SQLite: negócio e outbox)]
   end
-
-  subgraph Vercel
-    W[Sites e painéis<br/>Next.js + TypeScript<br/>monorepo Turborepo]
-  end
-
-  subgraph Borda
-    CF[Cloudflare<br/>DNS, TLS, WAF]
-    PX[Proxy reverso<br/>Nginx]
-  end
-
-  subgraph VPS de produção
-    E[Evolution API<br/>WhatsApp]
-    subgraph Por restaurante
-      RT1[Router do restaurante A<br/>Node.js + Express]
-      RT2[Router do restaurante B<br/>Node.js + Express]
-    end
-    CT[Control plane<br/>cadastro, provisionamento, auditoria]
-    PG[(PostgreSQL<br/>um banco por restaurante)]
-    RD[(Redis<br/>sessões e deduplicação)]
-  end
-
-  subgraph Operação
-    BK[Backup WAL-G<br/>storage externo]
-    OB[Prometheus, Grafana,<br/>Loki, alertas]
-    SEC[Cofre de segredos]
-  end
-
-  C --> CF --> PX
-  R --> W --> CF
-  PX --> RT1 & RT2
-  C -. mensagens .-> E -- webhook --> RT1 & RT2
-  RT1 & RT2 --> PG & RD
-  CT --> PG
-  PG --> BK
-  RT1 & RT2 & PG --> OB
-  SEC -. no deploy .-> RT1 & RT2 & CT
+  Local --> Sync[Sincronização e inbox idempotente]
+  Sync --> PG
+  Painel --> Sync
+  PG --> Backup[Backup e recuperação]
+  Online -. sinais operacionais .-> Obs[Observabilidade]
+  Sync -. sinais operacionais .-> Obs
 ```
 
-## Decisões principais
+## Isolamento e fronteiras
 
-| Decisão | Por quê |
-|---|---|
-| **Um processo, um banco e uma instância de WhatsApp por restaurante** | Isolamento: o bug ou a carga de um cliente não atinge outro, e é possível migrar, restaurar ou retirar um restaurante sozinho. |
-| **Control plane separado**, acessível só por rede privada | Quem cria, suspende e audita restaurantes não fica exposto na internet. |
-| **Frontends na Vercel, backend na VPS** | O site escala sozinho; o backend fica perto do banco e do WhatsApp. |
-| **Produção não constrói, só executa** | Imagens Docker são construídas no CI, publicadas no GHCR e fixadas por digest. A VPS só puxa e roda. |
-| **Segredos fora do repositório** | Cofre de segredos com acessos separados por ambiente; o CI falha se uma variável com nome de segredo aparecer em arquivo de configuração. |
-| **Backup contínuo com recuperação ensaiada** | WAL-G com recuperação em ponto no tempo; o ensaio de restauração faz parte da rotina, não da teoria. |
-| **Consentimento como regra de backend** | Opt-out global, limite de frequência, maioridade para bebida alcoólica e revalidação antes de cada envio de campanha. |
+O núcleo online usa processo, banco e instância de WhatsApp por restaurante. O servidor PostgreSQL e outros recursos de infraestrutura podem ser compartilhados. Essa separação reduz o alcance de erros de aplicação e facilita manutenção por tenant; não elimina falhas comuns de host, banco ou integrações.
 
-## Números do código (outubro de 2026)
+O control plane cuida do ciclo de vida dos restaurantes. O backend comercial cuida de leads, contas e acesso. Nenhum deles substitui o backend de negócio do restaurante. Interfaces públicas, painel do restaurante e console interno são aplicações distintas, com código compartilhado onde pertinente.
 
-| Repositório (privado) | Commits | Arquivos de teste |
-|---|---|---|
-| Router (atendimento, CRM, pedidos, reservas, campanhas) | 259 | 130 |
-| Control plane (provisionamento e console da plataforma) | 60 | 17 |
-| Infraestrutura (CD, backup, observabilidade, VPS) | 127 | 6 |
+## Consistência local e nuvem
 
-Além desses, o monorepo dos frontends (Next.js) e o site institucional.
+```mermaid
+sequenceDiagram
+  participant PDV
+  participant Local as Servidor e SQLite
+  participant Worker as Worker de sincronização
+  participant Nuvem as Inbox e projeções
+  PDV->>Local: Confirmar venda
+  Note over Local: Transação: venda + evento na outbox
+  Local-->>PDV: Confirmação após persistência
+  Worker->>Local: Ler eventos pendentes
+  Worker->>Nuvem: Enviar lote
+  Note over Nuvem: Transação: deduplicar + aplicar projeção
+  Nuvem-->>Worker: Identificadores aceitos
+  Worker->>Local: Marcar eventos confirmados
+```
+
+Se a resposta se perde, o worker pode reenviar. A inbox identifica o evento dentro do tenant e impede repetir o efeito. A entrega é pelo menos uma vez; o efeito depende da deduplicação e da transação no destino. Relatórios remotos podem ficar atrasados enquanto a loja está desconectada. O disco e a saúde do servidor local também impõem limites.
+
+Cada dado tem um sistema responsável: catálogo e pedidos online pertencem ao núcleo online; vendas presenciais, caixa e comandas pertencem ao Gestor. O painel deve encaminhar alterações ao responsável e apresentar falhas parciais quando um formulário alcança mais de um sistema.
+
+## Segurança e operação
+
+Autorização considera o contexto do restaurante e o papel do usuário. Consentimento, transferência para humano e auditoria fazem parte das regras do backend. A configuração específica de cada cliente fica fora do código compartilhado.
+
+Aplicações publicadas como imagem passam por CI, staging e promoção por digest. Os frontends público e do restaurante seguem sua integração de publicação na Vercel. Banco, arquivos e aplicação têm mecanismos de recuperação diferentes; reverter imagem não desfaz uma migração nem recupera dados apagados.
+
+As [decisões](decisoes.md) explicitam custos e alternativas. As [evidências](evidencias.md) delimitam o que pode ser reproduzido aqui.

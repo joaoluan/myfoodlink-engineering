@@ -4,11 +4,38 @@
 ![Node](https://img.shields.io/badge/node-20%20%7C%2022-339933)
 ![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-blue)
 
-O **MyFoodLink** é a plataforma que eu construí e opero para restaurantes: atendimento por WhatsApp com transferência para humano, CRM, campanhas com consentimento (LGPD), cardápio digital, pedidos, reservas, avaliações e fidelidade. Cada restaurante roda isolado, com processo, banco e instância de WhatsApp próprios. Hoje atende 2 restaurantes em produção, com cerca de 300 pedidos e mais de 2.000 acessos por mês.
+O **MyFoodLink (MFL)** é um SaaS para restaurantes que integra relacionamento com o cliente, vendas online, gestão da plataforma e operação local da loja. O desafio de engenharia é manter essas partes coerentes diante de mensagens repetidas, falhas de rede, concorrência, diferentes permissões e dados de vários restaurantes.
 
-O código do produto é privado. **Este repositório mostra como ele é feito:** problemas reais que apareceram em produção, a causa de cada um e a correção, com código e testes que rodam aqui. Tudo foi extraído do código real e sanitizado (sem clientes, endereços ou segredos).
+Este repositório reúne uma **visão técnica do produto e exemplos executáveis sanitizados**. O código completo do SaaS permanece privado. Os exemplos permitem examinar decisões e reproduzir comportamentos sem acessar clientes, serviços ou ambientes reais.
 
-> Antes do código, foram 15 anos em restaurantes, entre gestão e vendas. Por isso este repositório fala tanto de "o que acontece com o cliente" quanto de "o que acontece no servidor".
+## Por onde começar
+
+| Interesse | Leitura |
+|---|---|
+| Entender o produto e suas fronteiras | [Mapa do SaaS](docs/produto.md) |
+| Avaliar arquitetura e integração entre sistemas | [Arquitetura](docs/arquitetura.md) |
+| Discutir escolhas, custos e alternativas | [Decisões de engenharia](docs/decisoes.md) |
+| Preparar a apresentação do projeto final | [Roteiro técnico](docs/apresentacao.md) |
+| Verificar o que este material comprova | [Evidências e limites](docs/evidencias.md) |
+| Executar código e avaliar regressões | Casos abaixo e `npm test` |
+
+A documentação foi reconciliada em **08/11/2026** com referências técnicas locais do projeto. Essa revisão é documental; não representa inspeção do ambiente em execução. Funcionalidades implementadas, homologação e uso real têm evidências diferentes, explicitadas no [mapa do SaaS](docs/produto.md).
+
+## Demonstração: venda offline e sincronização sem efeito duplicado
+
+O [caso 11](docs/casos/11-venda-offline-e-sincronizacao.md) acrescenta um fluxo completo com **SQLite real**, sem serviços externos: confirmar venda offline, persistir evento, perder a resposta após o commit remoto e reenviar sem duplicar a projeção.
+
+```sh
+# Node.js >= 22.13 para este recorte (usa node:sqlite)
+npm run demo:sync
+npm run test:sync
+```
+
+- [Persistência e ingestão](src/sync/store.js): transações, constraints, isolamento por tenant e detecção de evento alterado.
+- [Worker](src/sync/worker.js): confirmação explícita por ID, backoff com jitter e coordenação de chamadas simultâneas.
+- [Testes de integração](test/integration/sync.test.js): arquivos reais, reabertura do banco e falhas controladas.
+
+É uma implementação demonstrativa dos padrões do Gestor. O destino usa SQLite para execução independente; não é uma cópia do serviço privado de sincronização.
 
 ## Problemas reais e como foram resolvidos
 
@@ -29,24 +56,25 @@ O código do produto é privado. **Este repositório mostra como ele é feito:**
 
 O [caso 01](docs/casos/01-mensagens-duplicadas.md) foi revisado neste repositório demonstrativo: a versão anterior marcava o ID antes da gravação e respondia 200 em caso de erro, podendo descartar uma mensagem não gravada. A correção pública responde 503 na falha, libera o ID para uma nova tentativa e faz entregas simultâneas aguardarem a mesma admissão. Os testes agora cobrem falha seguida de recuperação. Essa revisão não modifica nem atesta o comportamento do código privado em produção; os contratos de persistência e os limites do cache em memória estão documentados no caso.
 
-## CI/CD em uma imagem
+## Do código à operação
 
 ```mermaid
 flowchart LR
-  PR[Pull request] --> CI[Testes, audit,<br/>ShellCheck, segredos]
-  CI --> IMG[Imagem Docker no GHCR<br/>fixada por digest]
-  IMG --> MERGE[Merge = aprovação]
-  MERGE --> VPS[VPS puxa a release]
-  VPS --> GATES{CI verde?<br/>Backup < 26 h?<br/>Healthy? Smoke?}
-  GATES -- sim --> OK[No ar]
-  GATES -- não --> RB[Rollback automático]
+  CI[Testes e build] --> IMG[Artefato candidato]
+  IMG --> ST[Staging e evidência por digest]
+  ST --> PR[Revisão da promoção]
+  PR --> PROD[Produção puxa a release]
+  PROD --> G{Saúde e smoke}
+  G -- sucesso --> OK[Release aceita]
+  G -- falha --> RB[Rollback da aplicação]
 ```
 
-Detalhes em [`docs/ci-cd.md`](docs/ci-cd.md). Arquitetura e decisões em [`docs/arquitetura.md`](docs/arquitetura.md).
+Esse fluxo corresponde aos serviços publicados por imagem. Os frontends público e do restaurante têm publicação própria na Vercel. Rollback da aplicação não equivale a restaurar dados. Detalhes em [CI/CD](docs/ci-cd.md).
 
 ## Stack do produto
 
 **Backend:** Node.js, Express, PostgreSQL, Redis, Evolution API (WhatsApp), Stripe e Mercado Pago
+**Operação local:** TypeScript, SQLite, outbox/inbox, PDV, garçom e KDS
 **Frontend:** Next.js, React, TypeScript, Tailwind, monorepo com Turborepo
 **Operação:** Docker, GitHub Actions, GHCR, Nginx, Cloudflare, Tailscale, WAL-G, Prometheus, Grafana, Loki, cofre de segredos
 **Qualidade:** Node Test Runner, Vitest, Playwright, testes de regressão dos scripts de operação
@@ -70,22 +98,17 @@ src/
   phone/          caso 06 (telefone brasileiro canônico)
   provisioning/   caso 09 (preparação de restaurante com rollback)
   security/       cifra de credenciais (AES-256-GCM) e link assinado (HMAC)
+  sync/           caso 11 (venda, outbox, inbox e worker)
 ops/              casos 07 e 08 (backup com lock, deploy puxado, gate de digest)
-test/             um arquivo de teste por caso
+test/             testes por caso e integração SQLite em integration/
+examples/         demonstração de falha de conexão e recuperação
 docs/             arquitetura, CI/CD e os casos
 ```
 
-## Como trabalho com IA
+## Autoria
 
-Uso Claude Code e Codex como par de programação para ir mais rápido. A arquitetura, as decisões, a revisão de cada mudança e os testes que provam o comportamento são meus. Os casos acima são problemas que eu investiguei e decidi como resolver.
-
-## Autor
-
-**João Luan Mendonça Moura** · Desenvolvedor Full Stack · Novo Hamburgo, RS
-[Portfólio](https://joaomoura.dev.br/) · [Currículo](https://joaomoura.dev.br/curriculo-joao-moura-pt.pdf) · [GitHub](https://github.com/joaoluan)
-
----
+Desenvolvido por [João Luan Mendonça Moura](https://github.com/joaoluan). Este material apresenta o problema de negócio, as decisões técnicas e suas evidências; a [apresentação](docs/apresentacao.md) organiza esses pontos para discussão acadêmica e entrevistas.
 
 ### In English
 
-Engineering notes from **MyFoodLink**, a multi-tenant restaurant SaaS I built and run, serving 2 restaurants in production with about 300 orders and 2,000+ visits per month (WhatsApp service with human handoff, CRM, consent-aware campaigns, online menus, orders, bookings, reviews and loyalty). The product code is private. This repository shows real production problems, their root causes and the fixes, as sanitized, tested code: webhook idempotency, context-aware opt-out (LGPD), multi-tenant payment webhooks, a PostgreSQL pool deadlock, Redis reconnection, Brazilian phone normalization, a backup lock race, a pull-based deploy with automatic rollback, and safe tenant provisioning. CI runs the tests on Node 20 and 22, ShellCheck and a gitleaks secret scan.
+MyFoodLink is a restaurant SaaS combining online customer service and sales, tenant lifecycle management, and local store operations. This repository provides a sanitized architecture overview, engineering tradeoffs, and runnable regression examples. The full product remains private. Local operations use transactional outbox/inbox synchronization; hardware acceptance and fiscal enablement have separate validation requirements. See [evidence and limitations](docs/evidencias.md) for the scope of the public examples.
